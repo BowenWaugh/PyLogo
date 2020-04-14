@@ -387,10 +387,76 @@ class Commuter_World(World):
                 return 1
 
     def best_random_route(self):
-        return 1
+        middle_on = SimEngine.gui_get("middle_on")
+        randomness = SimEngine.gui_get("randomness")
+        middle = World.middle
+        bottom = World.bot
+        top = World.top
+
+        if middle_on:
+            if middle == 0 or bottom == 0 or top == 0:
+                return randint(0, 2)
+            elif randint(0, 100) < (100 - randomness):
+                if middle < top and middle < bottom:
+                    return 2
+                elif top < middle and top < bottom:
+                    return 0
+                else:
+                    return 1
+            else:
+                return randint(0, 2)
+        elif top == 0 or bottom == 0:
+            return randint(0, 1)
+        elif randint(0, 100) < (100 - randomness):
+            if top < bottom:
+                return 0
+            else:
+                return 1
+        else:
+            return randint(0, 1)
 
     def analytical_route(self):
-        return 0
+        middle_on = SimEngine.gui_get("middle_on")
+        agents = World.agents
+        commuters = len(agents)
+        num_top = 0
+        num_mid = 0
+        num_bot = 0
+
+        for agent in agents:
+            if agent.route == 0:
+                num_top += 1
+
+            if agent.route == 1:
+                num_bot += 1
+
+            if agent.route == 2:
+                num_mid += 1
+
+        if middle_on:
+            if commuters == 0:
+                randint(0, 2)
+            else:
+                top_score = ((num_top + num_mid) / commuters) * 1 + 1
+                bottom_score = ((num_bot + num_mid) / commuters) * 1 + 1
+                middle_score = (num_mid / commuters) * 1 + 1
+                if top_score < bottom_score and top_score < middle_score:
+                    return 0
+                elif bottom_score < middle_score and bottom_score < top_score:
+                    return 1
+                elif top_score == bottom_score and middle_score == top_score:
+                    return randint(0, 2)
+                else:
+                    return 2
+        elif commuters == 0:
+            return randint(0, 1)
+        else:
+            top_score = (num_top / commuters) * 1 + 1
+            bottom_score = (num_bot / commuters) * 1 + 1
+            if top_score < bottom_score:
+                return 0
+            else:
+                return 1
 
 
 # ############################################## Define GUI ############################################## #
