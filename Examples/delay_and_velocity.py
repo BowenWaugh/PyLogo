@@ -2,7 +2,9 @@ from itertools import cycle
 from math import floor, ceil
 from random import random, uniform, randrange, randint
 
+from core import gui
 from core.agent import Agent
+from core.gui import HOR_SEP
 from core.pairs import Velocity
 from core.sim_engine import SimEngine
 from core.world_patch_block import World, Patch
@@ -24,13 +26,7 @@ class Commuter(Agent):
 
     def move(self, initial_speed, move_by_delay):
         if move_by_delay:
-            patch = self.current_patch()
-            if self.route == 1:
-                patch_ahead = World.patches_array[patch.row + 1, patch.col]
-            else:
-                patch_ahead = World.patches_array[patch.row, patch.col + 1]
-
-            self.move_to_patch(patch_ahead)
+            self.forward(gui.PATCH_SIZE + 1)
             self.ticks_here = 1
 
         else:
@@ -70,9 +66,9 @@ class Road_Patch(Patch):
 
     def determine_congestion(self, spawn_rate, highway, move_by_delay):
         if self.last_here == 0:
-            self.delay = int(self.base_delay/2)
+            self.delay = int(self.base_delay / 2)
         else:
-            self.delay = floor(((250/spawn_rate)/(World.ticks-self.last_here+1))*self.base_delay)
+            self.delay = floor(((250 / spawn_rate) / (World.ticks - self.last_here + 1)) * self.base_delay)
         g = 255 + floor(255 * (0.5 - self.delay / self.base_delay))
         if g < 100:
             g = 100
@@ -90,6 +86,7 @@ class Road_Patch(Patch):
                 prev_patch = highway.top_road[self.col - 12]
             else:
                 prev_patch = highway.bottom_road[self.col - 12]
+
             prev_patch.set_color(Color(g, g, g))
 
 
@@ -153,9 +150,13 @@ class Highway:
 
     def check_delay(self, middle_on, delay_on):
         if delay_on != self.delay_prev:
+            # Recreate the road, resetting the delays
             self.create_road()
+            for agent in World.agents:
+                agent.move_to_patch(agent.current_patch())
             self.delay_prev = delay_on
             self.check_middle(middle_on, delay_on)
+
 
 class Commuter_World(World):
     top_left = None
@@ -249,9 +250,9 @@ class Commuter_World(World):
         """
         Update the world by moving the agents.
         """
-        spawn_rate = SimEngine.gui_get('spawn rate')
-        middle_on = SimEngine.gui_get("middle_on")
-        delay_on = SimEngine.gui_get("delay")
+        spawn_rate = SimEngine.gui_get(SPAWN_RATE)
+        middle_on = SimEngine.gui_get(MIDDLE_ON)
+        delay_on = SimEngine.gui_get(DELAY_ON)
 
         # check if the checkboxes have changed (Middle On? and Move by Delay?)
         World.highway.check_delay(middle_on, delay_on)
@@ -274,21 +275,21 @@ class Commuter_World(World):
         self.spawn_commuter()
 
     def new_route(self):
-        b = SimEngine.gui_get('best')
-        if b == 'Best Known /w Random Dev':
+        b = SimEngine.gui_get(SELECTION_ALGORITHM)
+        if b == BEST_KNOWN:
             route = self.best_random_route()
-        elif b == 'Empirical Analytical':
+        elif b == EMPIRICAL_ANALYTICAl:
             route = self.analytical_route()
-        elif b == 'Probabilistic Greedy':
+        elif b == PROBABILISTIC_GREEDY:
             route = self.probablisitic_greedy_route()
         else:
             route = 0
         return route
 
     def spawn_commuter(self):
-        spawn_rate = SimEngine.gui_get('spawn rate')
+        spawn_rate = SimEngine.gui_get(SPAWN_RATE)
         if World.spawn_time > (250 / spawn_rate):
-            World.cars_spawned = World.cars_spawned + 1
+            World.cars_spawned = len(World.agents)
             a = Commuter(World.ticks, scale=1)
             a.move_to_patch(World.top_left)
             a.set_route(self.new_route())
@@ -301,7 +302,7 @@ class Commuter_World(World):
         ...
 
     def move_commuters(self):
-        delay_on = SimEngine.gui_get("delay")
+        delay_on = SimEngine.gui_get(DELAY_ON)
 
         # delete agents that finished route
         for agent in World.despawn_list:
@@ -315,14 +316,22 @@ class Commuter_World(World):
                 curr_patch.delay = -1
             if agent.ticks_here > curr_patch.delay:
                 curr_patch.last_here = World.ticks
-                if agent.current_patch() is World.top_right:
-                    World.despawn_list.append(agent)
-                if agent.current_patch() is World.bot_left:
-                    World.despawn_list.append(agent)
                 agent.move(1, delay_on)
+                agent.ticks_here = 1
+
+                if agent.current_patch() is World.top_right and agent.route == 0:
+                    agent.set_center_pixel(World.top_right.center_pixel)
+                    agent.face_xy(World.bot_right.center_pixel)
+                elif agent.current_patch() == World.top_right and agent.route == 2:
+                    agent.set_center_pixel(World.top_right.center_pixel)
+                    agent.face_xy(World.bot_left.center_pixel)
+                elif agent.current_patch() is World.bot_left:
+                    agent.set_center_pixel(World.bot_left.center_pixel)
+                    agent.face_xy(World.bot_right.center_pixel)
+                elif agent.current_patch() is World.bot_right:
+                    World.despawn_list.append(agent)
             else:
                 agent.ticks_here = agent.ticks_here + 1
-
 
     def probablisitic_greedy_route(self):
         middle_on = SimEngine.gui_get("middle_on")
@@ -335,7 +344,7 @@ class Commuter_World(World):
             t_dif = 2 - World.top
             if t_dif < 0:
                 t_dif = 0
-            t_dif = t_dif**(randomness/10)
+            t_dif = t_dif ** (randomness / 10)
 
             b_dif = 2 - World.bot
             if b_dif < 0:
@@ -368,8 +377,8 @@ class Commuter_World(World):
             if World.top == 0 or World.bot == 0:
                 return randint(0, 1)
 
-            t_dif = (2-World.top)**(randomness/10)
-            b_dif = (2-World.bot)**(randomness/10)
+            t_dif = (2 - World.top) ** (randomness / 10)
+            b_dif = (2 - World.bot) ** (randomness / 10)
             sigma = t_dif / (t_dif + b_dif)
             split = 1000 * sigma
             if (random() * 1000) < split:
@@ -384,31 +393,53 @@ class Commuter_World(World):
         return 0
 
 
-
-
-
-
 # ############################################## Define GUI ############################################## #
 import PySimpleGUI as sg
 
-gui_left_upper = [[sg.Text('Spawn Rate', pad=((0, 5), (20, 0))),
-                   sg.Slider(key='spawn rate', range=(1, 10), default_value=10,
-                             orientation='horizontal', size=(10, 20))],
+MIDDLE_ON = 'middle_on'
+DELAY_ON = 'delay_on'
+SPAWN_RATE = 'spawn rate'
+SELECTION_ALGORITHM = 'Selection'
+BEST_KNOWN = 'Best Known'
+EMPIRICAL_ANALYTICAl = 'Empirical Analytical'
+PROBABILISTIC_GREEDY = 'Probabilistic Greedy'
+SMOOTHING = 'smoothing'
+RANDOMNESS = 'randomness'
+AVERAGE = 'average'
+FASTEST_TOP = 'fastest top'
+FASTEST_MIDDLE = 'fastest middle'
+FASTEST_BOTTOM = 'fastest bottom'
+
+gui_left_upper = [[sg.Text('Middle On?', pad=((0, 5), (20, 0))),
+                   sg.CB('True', key=MIDDLE_ON, default=True, pad=((0, 5), (20, 0)))],
+
+                  [sg.Text('Move by Delay?', pad=((0, 5), (20, 0))),
+                   sg.CB('True', key=DELAY_ON, default=True, pad=((0, 5), (20, 0)))],
+
+                  [sg.Text('Spawn Rate', pad=((0, 5), (20, 0))),
+                   sg.Slider(key=SPAWN_RATE, default_value=10, range=(1, 10),
+                             pad=((0, 5), (10, 0)), orientation='horizontal', size=(10, 20))],
 
                   [sg.Text('Smoothing', pad=((0, 5), (20, 0))),
-                   sg.Slider(key='smoothing', range=(1, 10), default_value=10,
+                   sg.Slider(key=SMOOTHING, default_value=10, range=(1, 10), pad=((0, 5), (10, 0)),
                              orientation='horizontal', size=(10, 20))],
+
+                  [sg.Text('Selection', pad=((0, 5), (20, 0))),
+                   sg.Combo([BEST_KNOWN, EMPIRICAL_ANALYTICAl, PROBABILISTIC_GREEDY],
+                            key=SELECTION_ALGORITHM, default_value=BEST_KNOWN,
+                            tooltip='Selection Algorithm', pad=((0, 5), (20, 0)))],
 
                   [sg.Text('Randomness', pad=((0, 5), (20, 0))),
-                   sg.Slider(key='randomness', range=(0, 100), default_value=10,
+                   sg.Slider(key=RANDOMNESS, default_value=16, resolution=1,
+                             range=(0, 100), pad=((0, 5), (10, 0)),
                              orientation='horizontal', size=(10, 20))],
 
-                  [sg.Combo(['Best Known /w Random Dev', 'Empirical Analytical', 'Probabilistic Greedy'],
-                            default_value='Probabilistic Greedy', pad=((0, 5), (20, 0)), key='best')],
+                  HOR_SEP(pad=((30, 0), (0, 0))),
 
-                  [sg.Checkbox("Middle On?", key='middle_on', default=True, pad=((20, 0), (20, 0)))],
-
-                  [sg.Checkbox("Move by Delay?", key='delay', default=True, pad=((20, 0), (20, 0)))]
+                  [sg.Text('Average = '), sg.Text('         0', key=AVERAGE)],
+                  [sg.Text('Fastest Top Time = '), sg.Text('         0', key=FASTEST_TOP)],
+                  [sg.Text('Fastest Middle Time = '), sg.Text('         0', key=FASTEST_MIDDLE)],
+                  [sg.Text('Fastest Bottom Time = '), sg.Text('         0', key=FASTEST_BOTTOM)]
                   ]
 
 if __name__ == "__main__":
