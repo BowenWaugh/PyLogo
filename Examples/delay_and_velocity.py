@@ -26,7 +26,7 @@ class Commuter(Agent):
 
     def move(self, initial_speed, move_by_delay):
         if move_by_delay:
-            self.forward(gui.PATCH_SIZE + 1)
+            self.forward(gui.BLOCK_SPACING())
             self.ticks_here = 1
 
         else:
@@ -579,4 +579,3 @@ if __name__ == "__main__":
     PyLogo(Commuter_World, 'Paradox', gui_left_upper, agent_class=Commuter, patch_class=Road_Patch,
            bounce=True, patch_size=9,
            board_rows_cols=(71, 71))
-
