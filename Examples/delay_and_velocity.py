@@ -1,6 +1,6 @@
 from itertools import cycle
 from math import floor, ceil
-from random import random, uniform, randrange, randint
+from random import random, uniform, randrange, randint, choice
 
 from core import gui
 from core.agent import Agent
@@ -197,6 +197,11 @@ class Commuter_World(World):
 
     def setup_roads(self):
         all_patches = World.patches_array
+
+        # create background
+        background = [Color(0, 0, 40), Color(0, 0, 50), Color(0, 0, 60)]
+        for patch in World.patches:
+            patch.set_color(choice(background))
 
         World.top_road = all_patches[10, 11:60]
         World.bottom_road = all_patches[60, 11:60]
@@ -481,27 +486,14 @@ class Commuter_World(World):
         middle_on = SimEngine.gui_get("middle_on")
         agents = World.agents
         commuters = len(agents)
-        num_top = 0
-        num_mid = 0
-        num_bot = 0
-
-        for agent in agents:
-            if agent.route == 0:
-                num_top += 1
-
-            if agent.route == 1:
-                num_bot += 1
-
-            if agent.route == 2:
-                num_mid += 1
 
         if middle_on:
             if commuters == 0:
                 randint(0, 2)
             else:
-                top_score = ((num_top + num_mid) / commuters) * 1 + 1
-                bottom_score = ((num_bot + num_mid) / commuters) * 1 + 1
-                middle_score = (num_mid / commuters) * 1 + 1
+                top_score = ((self.num_top + self.num_mid) / commuters) * 1 + 1
+                bottom_score = ((self.num_bot + self.num_mid) / commuters) * 1 + 1
+                middle_score = (self.num_mid / commuters) * 1 + 1
                 if top_score < bottom_score and top_score < middle_score:
                     return 0
                 elif bottom_score < middle_score and bottom_score < top_score:
@@ -513,8 +505,8 @@ class Commuter_World(World):
         elif commuters == 0:
             return randint(0, 1)
         else:
-            top_score = (num_top / commuters) * 1 + 1
-            bottom_score = (num_bot / commuters) * 1 + 1
+            top_score = (self.num_top / commuters) * 1 + 1
+            bottom_score = (self.num_bot / commuters) * 1 + 1
             if top_score < bottom_score:
                 return 0
             else:
