@@ -147,10 +147,11 @@ class Highway:
                 self.middle_prev = middle_on
                 self.check_delay(middle_on, delay_on)
             else:
-                for patch in self.middle_road:
-                    patch.set_color(Color("orange"))
-                    self.middle_prev = middle_on
-                self.check_delay(middle_on, delay_on)
+                if World.num_mid == 0:
+                    for patch in self.middle_road:
+                        patch.set_color(Color("orange"))
+                        self.middle_prev = middle_on
+                    self.check_delay(middle_on, delay_on)
 
     def check_delay(self, middle_on, delay_on):
         if delay_on != self.delay_prev:
@@ -263,11 +264,6 @@ class Commuter_World(World):
         self.highway.check_delay(middle_on, delay_on)
         self.highway.check_middle(middle_on, delay_on)
 
-        # set the route count of each route to 0
-        World.num_top = 0
-        World.num_bot = 0
-        World.num_mid = 0
-
         # move the computers
         self.move_commuters()
 
@@ -300,6 +296,12 @@ class Commuter_World(World):
             a.set_route(self.new_route())
             a.follow_route()
             World.spawn_time = 0
+            if a.route == 0:
+                World.num_top = World.num_top + 1
+            if a.route == 1:
+                World.num_bot = World.num_bot + 1
+            if a.route == 2:
+                World.num_mid = World.num_mid + 1
         else:
             World.spawn_time = World.spawn_time + 1
 
@@ -370,11 +372,6 @@ class Commuter_World(World):
                 curr_patch.last_here = World.ticks
                 agent.move(1, delay_on)
                 agent.ticks_here = 1
-
-                # if the middle road is closed
-                # have all agents on top road follow the top route
-                if not middle_on and not agent.passed_tr and agent.route == 2:
-                    agent.route = 0
 
                 if agent.current_patch() is World.top_right and agent.route == 0:
                     if not agent.passed_tr:
