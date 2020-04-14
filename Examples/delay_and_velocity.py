@@ -30,13 +30,16 @@ class Commuter(Agent):
             self.ticks_here = 1
 
         else:
-            if self.current_patch().color == Color("green"):
-                speed = initial_speed
+            if self.in_middle:
+                self.forward(initial_speed * 10)
             else:
-                speed = (self.current_patch().color.b / 127)
-                if speed <= 1:
-                    speed = 1
-            self.forward(speed)
+                if self.current_patch().color == Color("green"):
+                    speed = initial_speed
+                else:
+                    speed = (self.current_patch().color.b / 127)
+                    if speed <= 1:
+                        speed = 1
+                self.forward(speed)
 
     def set_route(self, r):
         self.route = r
@@ -77,9 +80,10 @@ class Road_Patch(Patch):
 
         if self.delay > 10:
             self.delay = 10
+        if self.delay < 4:
+            self.delay = 4
 
         if move_by_delay:
-            print(g)
             self.set_color(Color(g, g, g))
         else:
             if self in highway.top_road:
@@ -163,13 +167,11 @@ class Commuter_World(World):
     top_right = None
     bot_left = None
     bot_right = None
-    despawn_list = None
 
     top_road = None
     bottom_road = None
     left_road = None
     right_road = None
-    highway = None
 
     travel_time = None
     top = None
@@ -185,10 +187,14 @@ class Commuter_World(World):
 
     def __init__(self, *args, **kwargs):
         self.patch_class = Road_Patch
+        self.fastest_top = 0
+        self.fastest_bot = 0
+        self.fastest_mid = 0
+        self.despawn_list = []
+        self.highway = None
         super().__init__(*args, **kwargs)
 
-    @staticmethod
-    def setup_roads():
+    def setup_roads(self):
         all_patches = World.patches_array
 
         World.top_road = all_patches[10, 11:60]
@@ -210,10 +216,10 @@ class Commuter_World(World):
             middle_road.append(World.patches_array[j + 1, 70 - j])
 
         # Create all the roads
-        World.highway = Highway(World.top_road, World.bottom_road,
-                                World.left_road, World.right_road,
-                                middle_road, outer_road)
-        World.highway.create_road()
+        self.highway = Highway(World.top_road, World.bottom_road,
+                               World.left_road, World.right_road,
+                               middle_road, outer_road)
+        self.highway.create_road()
 
         # Make top_left patch
         World.top_left = World.patches_array[10, 10]
@@ -241,7 +247,6 @@ class Commuter_World(World):
         World.spawn_time = 0
         World.avg = 0
         World.cars_spawned = 0
-        World.despawn_list = []
         World.num_top = 0
         World.num_bot = 0
         World.num_mid = 0
@@ -255,8 +260,8 @@ class Commuter_World(World):
         delay_on = SimEngine.gui_get(DELAY_ON)
 
         # check if the checkboxes have changed (Middle On? and Move by Delay?)
-        World.highway.check_delay(middle_on, delay_on)
-        World.highway.check_middle(middle_on, delay_on)
+        self.highway.check_delay(middle_on, delay_on)
+        self.highway.check_middle(middle_on, delay_on)
 
         # set the route count of each route to 0
         World.num_top = 0
@@ -269,7 +274,7 @@ class Commuter_World(World):
         # set the patch color and patch delay
         for patch in World.patches:
             if patch.road_type == 1:
-                patch.determine_congestion(spawn_rate, World.highway, delay_on)
+                patch.determine_congestion(spawn_rate, self.highway, delay_on)
 
         # spawn agents
         self.spawn_commuter()
@@ -299,13 +304,60 @@ class Commuter_World(World):
             World.spawn_time = World.spawn_time + 1
 
     def end_commute(self, agent):
-        ...
+        travel_time = (World.ticks - agent.birth_tick) / 450
+        smoothing = SimEngine.gui_get('smoothing')
+        World.travel_time = travel_time
+
+        if World.avg == 0:
+            World.avg = travel_time
+        else:
+            World.avg = ((len(World.agents) - 1) * World.avg + travel_time) / len(World.agents)
+        SimEngine.gui_set(AVERAGE, value=World.avg)
+
+        if agent.route == 0:
+            if World.top == 0:
+                World.top = travel_time
+                self.fastest_top = travel_time
+            else:
+                World.top = ((travel_time + (smoothing - 1) * World.top) / smoothing)
+                if travel_time < self.fastest_top:
+                    self.fastest_top = travel_time
+            World.num_top = World.num_top - 1
+
+        elif agent.route == 1:
+            if World.bot == 0:
+                World.bot = travel_time
+                self.fastest_bot = travel_time
+            else:
+                World.bot = ((travel_time + (smoothing - 1) * World.bot) / smoothing)
+                if travel_time < self.fastest_bot:
+                    self.fastest_bot = travel_time
+            World.num_bot = World.num_bot - 1
+
+        else:
+            if World.middle == 0:
+                World.middle = travel_time
+                self.fastest_mid = travel_time
+            else:
+                World.middle = ((travel_time + (smoothing - 1) * World.middle) / smoothing)
+                if travel_time < self.fastest_mid:
+                    self.fastest_mid = travel_time
+            World.num_mid = World.num_mid - 1
+
+        print(f"Tick:{World.ticks}   T_time:{World.travel_time}   Avg:{World.avg} \n"
+              f"Mid_Time:{World.middle}  Top_Time:{World.top} Bot_Time:{World.bot}\n")
+        SimEngine.gui_set(FASTEST_TOP, value=self.fastest_top)
+        SimEngine.gui_set(FASTEST_BOTTOM, value=self.fastest_bot)
+        SimEngine.gui_set(FASTEST_MIDDLE, value=self.fastest_mid)
+
+        self.despawn_list.append(agent)
 
     def move_commuters(self):
         delay_on = SimEngine.gui_get(DELAY_ON)
+        middle_on = SimEngine.gui_get(MIDDLE_ON)
 
         # delete agents that finished route
-        for agent in World.despawn_list:
+        for agent in self.despawn_list:
             if agent in World.agents:
                 World.agents.remove(agent)
 
@@ -319,17 +371,30 @@ class Commuter_World(World):
                 agent.move(1, delay_on)
                 agent.ticks_here = 1
 
+                # if the middle road is closed
+                # have all agents on top road follow the top route
+                if not middle_on and not agent.passed_tr and agent.route == 2:
+                    agent.route = 0
+
                 if agent.current_patch() is World.top_right and agent.route == 0:
-                    agent.set_center_pixel(World.top_right.center_pixel)
+                    if not agent.passed_tr:
+                        agent.set_center_pixel(World.top_right.center_pixel)
+                        agent.passed_tr = True
                     agent.face_xy(World.bot_right.center_pixel)
                 elif agent.current_patch() == World.top_right and agent.route == 2:
-                    agent.set_center_pixel(World.top_right.center_pixel)
+                    if not agent.passed_tr:
+                        agent.set_center_pixel(World.top_right.center_pixel)
+                        agent.passed_tr = True
+                        agent.in_middle = True
                     agent.face_xy(World.bot_left.center_pixel)
                 elif agent.current_patch() is World.bot_left:
-                    agent.set_center_pixel(World.bot_left.center_pixel)
+                    if not agent.passed_bl:
+                        agent.set_center_pixel(World.bot_left.center_pixel)
+                        agent.passed_bl = True
+                        agent.in_middle = False
                     agent.face_xy(World.bot_right.center_pixel)
                 elif agent.current_patch() is World.bot_right:
-                    World.despawn_list.append(agent)
+                    self.end_commute(agent)
             else:
                 agent.ticks_here = agent.ticks_here + 1
 
@@ -351,7 +416,7 @@ class Commuter_World(World):
                 b_dif = 0
             b_dif = b_dif ** (randomness / 10)
 
-            m_dif = 2 - World.top
+            m_dif = 2 - World.middle
             if m_dif < 0:
                 m_dif = 0
             m_dif = m_dif ** (randomness / 10)
@@ -514,3 +579,4 @@ if __name__ == "__main__":
     PyLogo(Commuter_World, 'Paradox', gui_left_upper, agent_class=Commuter, patch_class=Road_Patch,
            bounce=True, patch_size=9,
            board_rows_cols=(71, 71))
+
