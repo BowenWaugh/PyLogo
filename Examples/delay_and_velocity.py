@@ -199,7 +199,7 @@ class Commuter_World(World):
         all_patches = World.patches_array
 
         # create background
-        background = [Color(0, 0, 40), Color(0, 0, 50), Color(0, 0, 60)]
+        background = [Color(0, 40, 0), Color(0, 50, 0), Color(0, 60, 0)]
         for patch in World.patches:
             patch.set_color(choice(background))
 
@@ -568,3 +568,4 @@ if __name__ == "__main__":
     PyLogo(Commuter_World, 'Paradox', gui_left_upper, agent_class=Commuter, patch_class=Road_Patch,
            bounce=True, patch_size=9,
            board_rows_cols=(71, 71))
+
